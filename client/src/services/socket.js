@@ -1,6 +1,11 @@
 import { io } from "socket.io-client";
 
-const socket = io("http://localhost:5000", {
+// ◄ CHANGED: Dynamically reads the URL and strips out /api so it maps to Nginx port 8090
+const SOCKET_URL = import.meta.env.VITE_API_BASE_URL 
+  ? import.meta.env.VITE_API_BASE_URL.replace('/api', '') 
+  : "http://localhost:5000";
+
+const socket = io(SOCKET_URL, {
   transports: ["websocket"],
   autoConnect: false,
 });
