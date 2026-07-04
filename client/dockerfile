@@ -44,5 +44,5 @@ CMD ["nginx", "-g", "daemon off;"]
 
 EXPOSE 80
 
-LABEL maintainer="your-team"
+LABEL maintainer="shivang"
 LABEL description="Frontend service - React + Vite application served with Nginx"
