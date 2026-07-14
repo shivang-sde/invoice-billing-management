@@ -501,7 +501,7 @@ VITE_API_BASE_URL=
 ## Clone Repository
 
 ```bash
-git clone https://github.com/your-username/Smart-Invoice-Billing-Management.git
+git clone https://github.com/Anshul92881/Smart-Invoice-Billing-Management.git
 ```
 
 ---
