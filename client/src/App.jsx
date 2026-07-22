@@ -80,7 +80,22 @@ function App() {
 
   return (
     <>
-      <Toaster position="top-right" />
+      <Toaster
+  position="top-right"
+  reverseOrder={false}
+  containerStyle={{
+    zIndex: 200000,
+  }}
+  toastOptions={{
+    duration: 4000,
+    style: {
+      zIndex: 200000,
+    },
+    error: {
+      duration: 5000,
+    },
+  }}
+/>
 
       <Routes>
         <Route path="/" element={<Login />} />

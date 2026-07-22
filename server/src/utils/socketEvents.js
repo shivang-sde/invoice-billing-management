@@ -1,6 +1,5 @@
-import { io } from "../../server.js";
-
 export const emitNotificationUpdate = ({
+  io,
   company_id,
   user_id,
 }) => {
@@ -18,6 +17,7 @@ export const emitNotificationUpdate = ({
 };
 
 export const emitCustomerNotification = ({
+  io,
   user_id,
   notification,
 }) => {
@@ -30,6 +30,7 @@ export const emitCustomerNotification = ({
 };
 
 export const emitDashboardUpdate = ({
+  io,
   company_id,
 }) => {
   if (company_id) {

@@ -13,7 +13,8 @@ import {
   uploadSuperAdminKycDocuments,
   rejectKyc,
   unblockCompany,
-} from "../controllers/kycController.js";
+  skipKyc,
+  } from "../controllers/kycController.js";
 
 import {
   sendAadhaarOtp,
@@ -99,6 +100,8 @@ router.use(authMiddleware);
 */
 
 router.get("/my-status", authorizeRoles("company_admin"), getMyKycStatus);
+
+router.post("/skip", authMiddleware, skipKyc);
 
 router.post(
   "/upload",

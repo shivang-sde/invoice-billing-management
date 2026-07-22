@@ -1,3 +1,4 @@
+import jwt from "jsonwebtoken";
 import db from "../config/db.js";
 import transporter from "../utils/emailService.js";
 import { createAuditLog } from "../utils/auditLogger.js";
@@ -168,6 +169,179 @@ const createTrialSubscription = async (connection, companyId) => {
     `,
     [companyId, trialPlan[0].id],
   );
+};
+
+export const skipKyc = async (req, res) => {
+  try {
+    const companyId = req.user?.company_id;
+    const requestUserId = req.user?.id;
+
+    if (!companyId || !requestUserId) {
+      return res.status(401).json({
+        message: "Invalid or expired KYC session.",
+      });
+    }
+
+    const [companies] = await db.query(
+      `
+      SELECT
+        id,
+        kyc_status,
+        kyc_attempts,
+        kyc_rejection_reason
+      FROM tbl_companies
+      WHERE id = ?
+      LIMIT 1
+      `,
+      [companyId],
+    );
+
+    if (!companies.length) {
+      return res.status(404).json({
+        message: "Company not found",
+      });
+    }
+
+    const company = companies[0];
+
+    if (
+      company.kyc_status === "approved" ||
+      company.kyc_status === "manual_verified"
+    ) {
+      return res.status(400).json({
+        message: "KYC already verified.",
+      });
+    }
+
+    if (
+      company.kyc_status === "blocked" ||
+      Number(company.kyc_attempts || 0) >= 3
+    ) {
+      return res.status(403).json({
+        message: "KYC attempts exhausted.",
+      });
+    }
+
+    if (company.kyc_status === "rejected") {
+      return res.status(403).json({
+        message:
+          company.kyc_rejection_reason || "KYC rejected. Contact Super Admin.",
+      });
+    }
+
+    const [users] = await db.query(
+      `
+      SELECT
+        id,
+        name,
+        email,
+        role,
+        company_id,
+        branch_id,
+        permissions,
+        profile_image,
+        status
+      FROM tbl_users
+      WHERE id = ?
+      LIMIT 1
+      `,
+      [requestUserId],
+    );
+
+    if (!users.length) {
+      return res.status(404).json({
+        message: "User not found",
+      });
+    }
+
+    const user = users[0];
+
+    let permissions = {};
+
+    if (user.permissions) {
+      try {
+        permissions =
+          typeof user.permissions === "string"
+            ? JSON.parse(user.permissions)
+            : user.permissions;
+      } catch {
+        permissions = {};
+      }
+    }
+
+    const token = jwt.sign(
+      {
+        id: user.id,
+        role: user.role,
+        company_id: user.company_id,
+        branch_id: user.branch_id,
+        kyc_status: company.kyc_status,
+        kyc_skipped: true,
+      },
+      process.env.JWT_SECRET,
+      {
+        expiresIn: process.env.JWT_EXPIRES_IN || "7d",
+      },
+    );
+
+    await db.query(
+      `
+      INSERT INTO tbl_kyc_verification_logs
+      (
+        company_id,
+        action,
+        remarks,
+        performed_by,
+        performed_role
+      )
+      VALUES
+      (
+        ?,
+        'KYC_SKIPPED',
+        'Company Admin skipped KYC',
+        ?,
+        'company_admin'
+      )
+      `,
+      [companyId, user.id],
+    );
+
+    await createAuditLog({
+      company_id: companyId,
+      user_id: user.id,
+      role: "company_admin",
+      action: "KYC_SKIPPED",
+      module_name: "KYC",
+      record_id: companyId,
+      description: "Company Admin skipped KYC",
+      ip_address: req.ip,
+      user_agent: req.headers["user-agent"] || null,
+    });
+
+    return res.json({
+      success: true,
+      token,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        company_id: user.company_id,
+        branch_id: user.branch_id,
+        profile_image: user.profile_image,
+        permissions,
+        status: user.status,
+        kyc_status: company.kyc_status,
+        kyc_skipped: true,
+        feature_access: "view_only",
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: "Failed to skip KYC",
+      error: error.message,
+    });
+  }
 };
 
 export const uploadCompanyKycDocuments = async (req, res) => {

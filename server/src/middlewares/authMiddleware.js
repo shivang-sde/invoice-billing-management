@@ -176,4 +176,59 @@ export const applyBranchFilter = (req, alias = "", column = "branch_id") => {
   };
 };
 
+export const kycAccessMiddleware = async (req, res, next) => {
+  try {
+    const mutationMethods = ["POST", "PUT", "PATCH", "DELETE"];
+
+    // View Only Mode
+    if (!mutationMethods.includes(req.method)) {
+      return next();
+    }
+
+    // Super Admin bypass
+    if (req.user?.role === "superadmin") {
+      return next();
+    }
+
+    if (!req.user?.company_id) {
+      return next();
+    }
+
+    const [companyRows] = await db.query(
+      `
+      SELECT kyc_status
+      FROM tbl_companies
+      WHERE id = ?
+      LIMIT 1
+      `,
+      [req.user.company_id],
+    );
+
+    if (!companyRows.length) {
+      return res.status(404).json({
+        message: "Company not found",
+      });
+    }
+
+    const kycStatus = String(
+      companyRows[0].kyc_status || "pending",
+    ).toLowerCase();
+
+    if (kycStatus !== "approved") {
+      return res.status(403).json({
+        message: "Complete your KYC to use this feature.",
+        kyc_required: true,
+        kyc_status: kycStatus,
+      });
+    }
+
+    next();
+  } catch (error) {
+    return res.status(500).json({
+      message: "Unable to verify KYC access",
+      error: error.message,
+    });
+  }
+};
+
 export default authMiddleware;

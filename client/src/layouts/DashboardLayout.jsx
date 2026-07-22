@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import api from "../services/api";
 import socket from "../services/socket";
 import { useNavigate } from "react-router-dom";
@@ -33,10 +34,10 @@ import {
 
 import { Link, Outlet, useLocation } from "react-router-dom";
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL 
-  ? import.meta.env.VITE_API_BASE_URL.replace('/api', '') 
+const BASE_URL = import.meta.env.VITE_API_BASE_URL
+  ? import.meta.env.VITE_API_BASE_URL.replace("/api", "")
   : "http://localhost:5000";
-  
+
 function DashboardLayout() {
   const location = useLocation();
   const profileMenuRef = useRef(null);
@@ -65,6 +66,11 @@ function DashboardLayout() {
 
   const [subscriptionStatus, setSubscriptionStatus] = useState(null);
   const [showTrialExpiredModal, setShowTrialExpiredModal] = useState(false);
+
+  const [showKycPendingModal, setShowKycPendingModal] = useState(false);
+  const [kycPendingMessage, setKycPendingMessage] = useState(
+    "Your KYC is pending. Complete KYC to use this feature.",
+  );
 
   const navigate = useNavigate();
 
@@ -124,6 +130,22 @@ function DashboardLayout() {
       localStorage.setItem("theme", "light");
     }
   }, [darkMode]);
+
+  useEffect(() => {
+    const handleKycRequired = (event) => {
+      setKycPendingMessage(
+        event?.detail?.message ||
+          "Your KYC is pending. Complete KYC to use this feature.",
+      );
+      setShowKycPendingModal(true);
+    };
+
+    window.addEventListener("kycRequired", handleKycRequired);
+
+    return () => {
+      window.removeEventListener("kycRequired", handleKycRequired);
+    };
+  }, []);
 
   const [unreadCount, setUnreadCount] = useState(0);
   const [notificationOpen, setNotificationOpen] = useState(false);
@@ -497,6 +519,25 @@ function DashboardLayout() {
     }
   };
 
+  const handleCompleteKyc = () => {
+    setShowKycPendingModal(false);
+
+    const companyId =
+      user?.company_id || localStorage.getItem("pending_company_id");
+
+    if (!companyId) {
+      toast.error("Company information not found. Please login again.");
+      return;
+    }
+
+    navigate(`/kyc-verification/${companyId}`, {
+      state: {
+        manualKyc: false,
+        email: user?.email || "",
+      },
+    });
+  };
+
   const handleLogout = async () => {
     try {
       await api.post("/auth/logout");
@@ -627,75 +668,87 @@ function DashboardLayout() {
       </aside>
 
       <section className="flex h-screen flex-col overflow-hidden lg:pl-72">
-        <header className="flex h-[73px] shrink-0 items-center border-b border-slate-200 bg-white px-4 transition-colors dark:border-slate-800 dark:bg-slate-900 sm:px-6 lg:px-8">
-          <div className="flex w-full items-center justify-between gap-4">
-            <div className="flex min-w-0 items-center gap-3">
+        <header className="flex h-[73px] shrink-0 items-center border-b border-slate-200 bg-white px-3 transition-colors dark:border-slate-800 dark:bg-slate-900 sm:px-5 lg:px-6 xl:px-8">
+          <div className="flex w-full min-w-0 items-center justify-between gap-3">
+            {/* LEFT SIDE */}
+            <div className="flex min-w-0 flex-1 items-center gap-3">
               <button
                 type="button"
                 onClick={() => setSidebarOpen(true)}
-                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 text-slate-700 transition hover:bg-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 lg:hidden"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 text-slate-700 transition hover:bg-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 lg:hidden"
+                aria-label="Open sidebar"
               >
-                <Menu size={21} />
+                <Menu size={20} />
               </button>
 
-              <div className="min-w-0">
-                <h2 className="truncate text-xl font-bold leading-tight tracking-tight text-slate-900 dark:text-white">
+              <div className="min-w-0 flex-1">
+                <h2 className="truncate text-base font-bold leading-tight tracking-tight text-slate-900 dark:text-white sm:text-lg xl:text-xl">
                   Welcome back, {user?.name || "User"}
                 </h2>
 
-                <p className="mt-1 hidden truncate text-sm font-medium leading-5 text-slate-500 dark:text-slate-400 sm:block">
+                <p className="mt-0.5 hidden truncate text-xs font-medium leading-5 text-slate-500 dark:text-slate-400 md:block xl:text-sm">
                   Manage invoices, GST, payments and reports
                 </p>
               </div>
             </div>
 
-            <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+            {/* RIGHT SIDE */}
+            <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+              {/* THEME */}
               <button
                 type="button"
                 onClick={() => setDarkMode((prev) => !prev)}
-                className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 text-slate-600 shadow-sm transition hover:bg-slate-200 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-yellow-300 dark:hover:bg-slate-700 dark:hover:text-yellow-200"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 text-slate-600 shadow-sm transition hover:bg-slate-200 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-yellow-300 dark:hover:bg-slate-700 dark:hover:text-yellow-200 sm:h-11 sm:w-11"
                 title={
                   darkMode ? "Switch to light mode" : "Switch to dark mode"
                 }
+                aria-label={
+                  darkMode ? "Switch to light mode" : "Switch to dark mode"
+                }
               >
-                {darkMode ? <Sun size={19} /> : <Moon size={19} />}
+                {darkMode ? <Sun size={18} /> : <Moon size={18} />}
               </button>
 
+              {/* NOTIFICATIONS */}
               <div ref={notificationRef} className="relative">
                 <button
                   type="button"
-                  onClick={() => setNotificationOpen((prev) => !prev)}
-                  className="relative flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 text-slate-600 shadow-sm transition hover:bg-slate-200 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-white"
+                  onClick={() => {
+                    setNotificationOpen((prev) => !prev);
+                    setProfileMenuOpen(false);
+                  }}
+                  className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 text-slate-600 shadow-sm transition hover:bg-slate-200 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-white sm:h-11 sm:w-11"
+                  aria-label="Open notifications"
                 >
-                  <Bell size={19} />
+                  <Bell size={18} />
 
                   {unreadCount > 0 && (
-                    <span className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-600 px-1 text-[11px] font-bold text-white">
+                    <span className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold text-white">
                       {unreadCount > 99 ? "99+" : unreadCount}
                     </span>
                   )}
                 </button>
 
                 {notificationOpen && (
-                  <div className="absolute right-0 z-50 mt-2 w-[calc(100vw-2rem)] max-w-96 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
-                    <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3 dark:border-slate-700">
-                      <div>
-                        <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                  <div className="fixed left-3 right-3 top-[78px] z-50 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900 sm:absolute sm:left-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-96">
+                    <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 dark:border-slate-700">
+                      <div className="min-w-0">
+                        <h3 className="truncate text-sm font-bold text-slate-900 dark:text-white">
                           Notifications
                         </h3>
+
                         <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
                           {unreadCount} unread alerts
                         </p>
                       </div>
 
-                      <div className="flex items-center gap-3">
+                      <div className="flex shrink-0 items-center gap-3">
                         {unreadCount > 0 && (
                           <button
                             type="button"
                             onClick={async () => {
                               try {
                                 await api.patch("/notifications/read-all");
-
                                 await fetchUnreadNotifications();
 
                                 window.dispatchEvent(
@@ -705,7 +758,7 @@ function DashboardLayout() {
                                 console.log(error);
                               }
                             }}
-                            className="text-xs font-semibold text-emerald-600 transition hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300"
+                            className="whitespace-nowrap text-xs font-semibold text-emerald-600 transition hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300"
                           >
                             Mark all read
                           </button>
@@ -714,14 +767,14 @@ function DashboardLayout() {
                         <Link
                           to="/dashboard/notifications"
                           onClick={() => setNotificationOpen(false)}
-                          className="text-xs font-semibold text-blue-600 transition hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+                          className="whitespace-nowrap text-xs font-semibold text-blue-600 transition hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
                         >
                           View all
                         </Link>
                       </div>
                     </div>
 
-                    <div className="max-h-[420px] overflow-y-auto">
+                    <div className="max-h-[min(420px,calc(100vh-160px))] overflow-y-auto">
                       {notifications.length > 0 ? (
                         notifications.map((item) => (
                           <div
@@ -750,31 +803,29 @@ function DashboardLayout() {
                             }`}
                           >
                             <div className="flex items-start gap-3">
-                              <div className="mt-1 flex w-3 justify-center">
+                              <div className="mt-1 flex w-3 shrink-0 justify-center">
                                 {Number(item.is_read) === 0 && (
                                   <span className="h-2.5 w-2.5 rounded-full bg-red-500" />
                                 )}
                               </div>
 
                               <div className="min-w-0 flex-1">
-                                <div className="flex items-start justify-between gap-2">
-                                  <p
-                                    className={`truncate text-sm text-slate-900 dark:text-white ${
-                                      Number(item.is_read) === 0
-                                        ? "font-bold"
-                                        : "font-semibold"
-                                    }`}
-                                  >
-                                    {item.title || "-"}
-                                  </p>
-                                </div>
+                                <p
+                                  className={`truncate text-sm text-slate-900 dark:text-white ${
+                                    Number(item.is_read) === 0
+                                      ? "font-bold"
+                                      : "font-semibold"
+                                  }`}
+                                >
+                                  {item.title || "-"}
+                                </p>
 
                                 <p className="mt-1 line-clamp-2 text-xs font-medium text-slate-500 dark:text-slate-400">
                                   {item.message || "-"}
                                 </p>
 
-                                <div className="mt-2 flex items-center justify-between">
-                                  <p className="text-[11px] font-medium text-slate-400 dark:text-slate-500">
+                                <div className="mt-2 flex items-center justify-between gap-3">
+                                  <p className="truncate text-[11px] font-medium text-slate-400 dark:text-slate-500">
                                     {item.created_at
                                       ? new Date(
                                           item.created_at,
@@ -783,7 +834,7 @@ function DashboardLayout() {
                                   </p>
 
                                   {Number(item.is_read) === 0 && (
-                                    <span className="text-[11px] font-bold text-blue-600 dark:text-blue-400">
+                                    <span className="shrink-0 text-[11px] font-bold text-blue-600 dark:text-blue-400">
                                       New
                                     </span>
                                   )}
@@ -798,6 +849,7 @@ function DashboardLayout() {
                             className="mx-auto text-slate-300 dark:text-slate-600"
                             size={30}
                           />
+
                           <p className="mt-2 text-sm font-semibold text-slate-600 dark:text-slate-300">
                             No notifications found
                           </p>
@@ -808,33 +860,56 @@ function DashboardLayout() {
                 )}
               </div>
 
+              {/* PROFILE */}
               <div ref={profileMenuRef} className="relative">
                 <button
                   type="button"
-                  onClick={() => setProfileMenuOpen((prev) => !prev)}
-                  className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-2 py-1.5 shadow-sm transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 md:px-3"
+                  onClick={() => {
+                    setProfileMenuOpen((prev) => !prev);
+                    setNotificationOpen(false);
+                  }}
+                  className="flex h-10 min-w-0 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 p-1 shadow-sm transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 sm:h-11 sm:px-1.5 xl:max-w-[230px] xl:gap-2.5 xl:px-2"
+                  aria-label="Open profile menu"
                 >
-                  <Avatar />
+                  {profileImageUrl ? (
+                    <img
+                      src={profileImageUrl}
+                      alt={user?.name || "User"}
+                      className="h-8 w-8 shrink-0 rounded-full border border-slate-200 object-cover dark:border-slate-700 sm:h-9 sm:w-9"
+                    />
+                  ) : (
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white sm:h-9 sm:w-9">
+                      {initials}
+                    </div>
+                  )}
 
-                  <div className="hidden min-w-0 text-left md:block">
-                    <p className="max-w-40 truncate text-sm font-semibold text-slate-900 dark:text-white">
+                  <div className="hidden min-w-0 flex-1 text-left xl:block">
+                    <p className="truncate text-sm font-semibold text-slate-900 dark:text-white">
                       {user?.name || "User"}
                     </p>
 
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                      {formatRole[role] || "User"}
-                    </p>
-
-                    {formatBranchLabel(user) && (
-                      <p className="mt-0.5 max-w-40 truncate text-xs font-semibold text-blue-700 dark:text-blue-300">
-                        {formatBranchLabel(user)}
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      <p className="shrink-0 text-[11px] text-slate-500 dark:text-slate-400">
+                        {formatRole[role] || "User"}
                       </p>
-                    )}
+
+                      {formatBranchLabel(user) && (
+                        <>
+                          <span className="text-[10px] text-slate-300 dark:text-slate-600">
+                            •
+                          </span>
+
+                          <p className="truncate text-[11px] font-semibold text-blue-700 dark:text-blue-300">
+                            {formatBranchLabel(user)}
+                          </p>
+                        </>
+                      )}
+                    </div>
                   </div>
 
                   <ChevronDown
-                    size={16}
-                    className={`hidden text-slate-500 transition dark:text-slate-400 md:block ${
+                    size={15}
+                    className={`hidden shrink-0 text-slate-500 transition dark:text-slate-400 xl:block ${
                       profileMenuOpen ? "rotate-180" : ""
                     }`}
                   />
@@ -846,9 +921,22 @@ function DashboardLayout() {
                       <p className="truncate text-sm font-bold text-slate-900 dark:text-white">
                         {user?.name || "User"}
                       </p>
+
                       <p className="truncate text-xs text-slate-500 dark:text-slate-400">
                         {user?.email || ""}
                       </p>
+
+                      <div className="mt-2 flex min-w-0 items-center gap-1.5">
+                        <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                          {formatRole[role] || "User"}
+                        </span>
+
+                        {formatBranchLabel(user) && (
+                          <span className="truncate rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
+                            {formatBranchLabel(user)}
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     <Link
@@ -909,6 +997,63 @@ function DashboardLayout() {
         }
       `}</style>
 
+      {showKycPendingModal &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[99999] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="kyc-pending-title"
+          >
+            <div className="relative z-[100000] w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_24px_80px_rgba(0,0,0,0.45)] dark:border-slate-700 dark:bg-slate-900">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300">
+                <ShieldCheck size={27} />
+              </div>
+
+              <h2
+                id="kyc-pending-title"
+                className="mt-5 text-xl font-bold text-slate-900 dark:text-white"
+              >
+                KYC Pending
+              </h2>
+
+              <p className="mt-3 text-sm font-medium leading-6 text-slate-600 dark:text-slate-300">
+                {kycPendingMessage}
+              </p>
+
+              <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/50 dark:bg-amber-950/30">
+                <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
+                  This action was blocked.
+                </p>
+
+                <p className="mt-1 text-sm leading-6 text-amber-700 dark:text-amber-300">
+                  You can explore the dashboard, but complete your KYC to unlock
+                  full access.
+                </p>
+              </div>
+
+              <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowKycPendingModal(false)}
+                  className="min-h-[46px] rounded-xl border border-slate-200 bg-slate-100 px-5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-200 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                >
+                  No
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleCompleteKyc}
+                  className="min-h-[46px] rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
+                >
+                  Yes, Complete KYC
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
+
       {showTrialExpiredModal && (
         <div className="fixed inset-0 z-[999] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
           <div className="w-full max-w-lg rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_20px_60px_rgba(0,0,0,0.45)] dark:border-slate-700 dark:bg-slate-900">
@@ -932,24 +1077,6 @@ function DashboardLayout() {
 
               <p className="mt-1 text-sm text-amber-700 dark:text-amber-300">
                 You may request a one-time 10-day trial extension.
-              </p>
-            </div>
-
-            <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800">
-              <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                Support Email
-              </p>
-
-              <p className="font-semibold text-slate-900 dark:text-white">
-                support@smartinvoice.com
-              </p>
-
-              <p className="mt-3 text-sm font-medium text-slate-700 dark:text-slate-300">
-                Contact Number
-              </p>
-
-              <p className="font-semibold text-slate-900 dark:text-white">
-                +91 00000 00000
               </p>
             </div>
 

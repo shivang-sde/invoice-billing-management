@@ -961,7 +961,7 @@ function SubscriptionList({
         icon={<Bookmark size={18} />}
         title="Subscription History"
         subtitle="Recent subscription plans assigned to your company."
-        buttonText="Manage"
+        buttonText="View All"
         onClick={onViewAll}
       />
 

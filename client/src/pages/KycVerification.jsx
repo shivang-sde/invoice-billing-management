@@ -295,6 +295,50 @@ function KycVerification() {
     }
   };
 
+  const skipKyc = async () => {
+    try {
+      setLoadingAction("skip_kyc");
+
+      const res = await api.post("/kyc/skip");
+
+      const token = res.data?.token;
+      const user = res.data?.user;
+
+      if (!token || !user) {
+        toast.error("Invalid skip KYC response");
+        return;
+      }
+
+      localStorage.setItem("token", token);
+      localStorage.setItem("user", JSON.stringify(user));
+
+      localStorage.removeItem("kyc_token");
+      localStorage.removeItem("kyc_user");
+      localStorage.removeItem("pending_company_id");
+      localStorage.removeItem("pending_admin_email");
+
+      toast.success(
+        res.data?.message || "KYC skipped. You can complete it later.",
+      );
+
+      navigate("/dashboard", {
+        replace: true,
+      });
+    } catch (err) {
+      console.error("SKIP KYC ERROR =>", {
+        status: err?.response?.status,
+        data: err?.response?.data,
+        message: err?.message,
+      });
+
+      if (handleAuthError(err)) return;
+
+      toast.error(err.response?.data?.message || "Failed to skip KYC");
+    } finally {
+      setLoadingAction("");
+    }
+  };
+
   const completeKyc = async () => {
     if (!documents.aadhaar_card || !documents.pan_card) {
       toast.error("Aadhaar document and PAN document are required");
@@ -574,7 +618,18 @@ function KycVerification() {
                 </p>
               </div>
 
-              <div className="flex justify-end">
+              <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+                {!isManualKyc && (
+                  <ActionButton
+                    onClick={skipKyc}
+                    loading={loadingAction === "skip_kyc"}
+                    disabled={isLoading}
+                    className="bg-slate-600 hover:bg-slate-700"
+                  >
+                    Skip for Now
+                  </ActionButton>
+                )}
+
                 <ActionButton
                   onClick={completeKyc}
                   loading={loadingAction === "complete_kyc"}

@@ -88,18 +88,47 @@ function Accountants() {
   };
 
   const fetchData = async () => {
-    try {
-      const [accountantRes, branchRes] = await Promise.all([
-        api.get("/users/accountants"),
-        api.get("/branches"),
-      ]);
+    const [accountantResult, branchResult] = await Promise.allSettled([
+      api.get("/users/accountants"),
+      api.get("/branches"),
+    ]);
 
-      setAccountants(accountantRes.data || []);
-      setBranches((branchRes.data || []).filter(isActiveBranch));
-    } catch (error) {
+    if (accountantResult.status === "fulfilled") {
+      const accountantData = Array.isArray(accountantResult.value.data)
+        ? accountantResult.value.data
+        : accountantResult.value.data?.accountants || [];
+
+      setAccountants(accountantData);
+    } else {
+      const error = accountantResult.reason;
+
+      console.error(
+        "Accountants API failed:",
+        error.response?.status,
+        error.response?.data,
+      );
+
       toast.error(
         error.response?.data?.message || "Failed to fetch accountants",
       );
+    }
+
+    if (branchResult.status === "fulfilled") {
+      const branchData = Array.isArray(branchResult.value.data)
+        ? branchResult.value.data
+        : branchResult.value.data?.branches || [];
+
+      setBranches(branchData.filter(isActiveBranch));
+    } else {
+      const error = branchResult.reason;
+
+      console.error(
+        "Branches API failed:",
+        error.response?.status,
+        error.response?.data,
+      );
+
+      toast.error(error.response?.data?.message || "Failed to fetch branches");
     }
   };
 
@@ -343,7 +372,9 @@ function Accountants() {
               Finance Team Management
             </div>
 
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Accountants</h1>
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
+              Accountants
+            </h1>
 
             <p className="mt-1 text-sm text-slate-500">
               Create, update and assign branch-wise finance users for your
@@ -542,7 +573,13 @@ function Accountants() {
   );
 }
 
-function AccountantTable({ accountants, onView, onEdit, onToggleStatus, formatBranchLabel }) {
+function AccountantTable({
+  accountants,
+  onView,
+  onEdit,
+  onToggleStatus,
+  formatBranchLabel,
+}) {
   return (
     <div className="w-full overflow-x-auto">
       <table className="w-full min-w-[950px] text-sm">
@@ -591,7 +628,9 @@ function AccountantTable({ accountants, onView, onEdit, onToggleStatus, formatBr
                   {formatBranchLabel(item)}
                 </td>
 
-                <td className="p-4 text-slate-600 dark:text-slate-300">{item.email || "-"}</td>
+                <td className="p-4 text-slate-600 dark:text-slate-300">
+                  {item.email || "-"}
+                </td>
 
                 <td className="p-4 text-slate-600 dark:text-slate-300">
                   {item.role || "accountant"}
@@ -722,13 +761,13 @@ function AccountantForm({
 
       <div className="mt-6 flex flex-col-reverse gap-3 border-t border-slate-200 pt-5 dark:border-slate-800 sm:flex-row sm:justify-end">
         <button
-  type="button"
-  onClick={onCancel}
-  className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-100 px-5 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition-all duration-200 hover:bg-slate-200 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 dark:hover:text-white"
->
-  <X size={16} />
-  Cancel
-</button>
+          type="button"
+          onClick={onCancel}
+          className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-100 px-5 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition-all duration-200 hover:bg-slate-200 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 dark:hover:text-white"
+        >
+          <X size={16} />
+          Cancel
+        </button>
 
         <button
           type="submit"
@@ -736,7 +775,11 @@ function AccountantForm({
           className="flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm outline-none ring-0 transition-all duration-200 hover:bg-blue-700 focus:outline-none focus:ring-0 active:ring-0 disabled:bg-blue-400"
         >
           <UserPlus size={16} />
-          {loading ? "Saving..." : editId ? "Save Changes" : "Create Accountant"}
+          {loading
+            ? "Saving..."
+            : editId
+              ? "Save Changes"
+              : "Create Accountant"}
         </button>
       </div>
     </form>
@@ -888,7 +931,7 @@ function BranchMiniForm({
 function AccountantViewModal({ accountant, formatBranchLabel, onClose }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-3 backdrop-blur-sm">
-     <div className="max-h-[90vh] w-full max-w-3xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
+      <div className="max-h-[90vh] w-full max-w-3xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
         <div className="flex items-start justify-between border-b border-slate-200 bg-slate-50 p-5 dark:border-slate-800 dark:bg-slate-900">
           <div className="flex items-center gap-4">
             <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
@@ -942,7 +985,9 @@ function FormModal({ title, description, icon, onClose, children }) {
             </div>
 
             <div>
-              <h2 className="text-xl font-bold text-slate-900 dark:text-white dark:text-white">{title}</h2>
+              <h2 className="text-xl font-bold text-slate-900 dark:text-white dark:text-white">
+                {title}
+              </h2>
               <p className="mt-1 text-sm text-slate-500">{description}</p>
             </div>
           </div>
@@ -956,7 +1001,9 @@ function FormModal({ title, description, icon, onClose, children }) {
           </button>
         </div>
 
-        <div className="overflow-auto bg-white p-5 dark:bg-slate-900">{children}</div>
+        <div className="overflow-auto bg-white p-5 dark:bg-slate-900">
+          {children}
+        </div>
       </div>
     </div>
   );
@@ -971,8 +1018,12 @@ function SummaryCard({ title, value, icon, color, onClick }) {
     >
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="text-sm font-medium text-slate-500 dark:text-slate-400">{title}</p>
-          <h2 className="mt-1 text-2xl font-bold text-slate-900 dark:text-white">{value}</h2>
+          <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
+            {title}
+          </p>
+          <h2 className="mt-1 text-2xl font-bold text-slate-900 dark:text-white">
+            {value}
+          </h2>
         </div>
 
         <div className={`rounded-xl p-3 ${color}`}>{icon}</div>
@@ -984,7 +1035,9 @@ function SummaryCard({ title, value, icon, color, onClick }) {
 function ViewField({ label, value, full }) {
   return (
     <div className={full ? "md:col-span-2" : ""}>
-      <p className="mb-1.5 text-sm font-semibold text-slate-700 dark:text-slate-200">{label}</p>
+      <p className="mb-1.5 text-sm font-semibold text-slate-700 dark:text-slate-200">
+        {label}
+      </p>
       <div className="min-h-[42px] rounded-xl border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800 px-3 py-2 text-sm text-slate-700 dark:text-slate-200">
         {value || "-"}
       </div>
@@ -1051,7 +1104,9 @@ function CustomDropdown({ value, onChange, options, icon }) {
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef(null);
 
-  const selected = options.find((option) => String(option.value) === String(value));
+  const selected = options.find(
+    (option) => String(option.value) === String(value),
+  );
 
   useEffect(() => {
     const closeDropdown = (e) => {
@@ -1234,7 +1289,9 @@ function BranchSelect({ branches, value, onChange, formatBranchLabel }) {
                 type="button"
                 onClick={() => handleSelect(String(branch.id))}
                 className={`w-full rounded-xl px-3 py-2 text-left transition hover:bg-blue-50 dark:hover:bg-slate-800 ${
-                  String(value) === String(branch.id) ? "bg-blue-50 dark:bg-blue-950/40" : ""
+                  String(value) === String(branch.id)
+                    ? "bg-blue-50 dark:bg-blue-950/40"
+                    : ""
                 }`}
               >
                 <p className="truncate text-sm font-semibold text-slate-800 dark:text-slate-100">
@@ -1260,7 +1317,7 @@ function BranchSelect({ branches, value, onChange, formatBranchLabel }) {
             <button
               type="button"
               onClick={() => handleSelect("__add_branch__")}
-             className="flex w-full items-center gap-2 rounded-xl bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-950"
+              className="flex w-full items-center gap-2 rounded-xl bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-950"
             >
               <Plus size={16} />
               Add New Branch

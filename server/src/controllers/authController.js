@@ -12,8 +12,7 @@ const getUserAgent = (req) => req.headers["user-agent"] || null;
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_REGEX = /^[6-9]\d{9}$/;
-const GST_REGEX =
-  /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
+const GST_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
 const NAME_REGEX = /^[a-zA-Z0-9\s.&'(),-]+$/;
 const BRANCH_CODE_REGEX = /^[a-zA-Z0-9_-]{2,20}$/;
 
@@ -89,11 +88,15 @@ export const login = async (req, res) => {
         user_agent: getUserAgent(req),
       });
 
-      return res.status(400).json({ message: "Email and password required" });
+      return res.status(400).json({
+        message: "Email and password required",
+      });
     }
 
     if (!isValidEmail(userEmail)) {
-      return res.status(400).json({ message: "Invalid email format" });
+      return res.status(400).json({
+        message: "Invalid email format",
+      });
     }
 
     const [users] = await db.query(
@@ -127,10 +130,13 @@ export const login = async (req, res) => {
         user_agent: getUserAgent(req),
       });
 
-      return res.status(401).json({ message: "Invalid email or password" });
+      return res.status(401).json({
+        message: "Invalid email or password",
+      });
     }
 
     const user = users[0];
+
     const isMatch = await bcrypt.compare(password, user.password);
 
     if (!isMatch) {
@@ -149,7 +155,8 @@ export const login = async (req, res) => {
       await db.query(
         `
         UPDATE tbl_users
-        SET failed_login_attempts = COALESCE(failed_login_attempts, 0) + 1
+        SET failed_login_attempts =
+          COALESCE(failed_login_attempts, 0) + 1
         WHERE id = ?
         `,
         [user.id],
@@ -164,7 +171,9 @@ export const login = async (req, res) => {
         [user.id],
       );
 
-      const failedAttempts = Number(attemptRows[0]?.failed_login_attempts || 0);
+      const failedAttempts = Number(
+        attemptRows[0]?.failed_login_attempts || 0,
+      );
 
       if (failedAttempts >= 4) {
         await sendCompanySecurityNotification({
@@ -177,63 +186,81 @@ export const login = async (req, res) => {
         });
       }
 
-      return res.status(401).json({ message: "Invalid email or password" });
+      return res.status(401).json({
+        message: "Invalid email or password",
+      });
     }
 
-    if (
-      user.role === "company_admin" &&
-      user.company_id &&
-      (user.company_status !== "active" ||
-        !["approved", "manual_verified"].includes(user.kyc_status))
-    ) {
-      const kycToken = jwt.sign(
-        {
-          id: user.id,
-          role: user.role,
-          company_id: user.company_id,
-          branch_id: user.branch_id || null,
-          permissions: {},
-          kyc_only: true,
-        },
-        process.env.JWT_SECRET,
-        { expiresIn: "2h" },
+
+    if (user.role === "company_admin" && user.company_id) {
+      const isKycBlocked = ["blocked", "rejected"].includes(
+        user.kyc_status,
       );
 
-      await createAuditLog({
-        company_id: user.company_id || null,
-        user_id: user.id,
-        role: user.role,
-        action: "KYC_LOGIN_BLOCKED",
-        module_name: "Auth",
-        record_id: user.id,
-        description: `Company Admin login blocked due to KYC status: ${
-          user.kyc_status || "pending"
-        }`,
-        ip_address: req.ip,
-        user_agent: getUserAgent(req),
-      });
+      if (isKycBlocked) {
+        const kycToken = jwt.sign(
+          {
+            id: user.id,
+            role: user.role,
+            company_id: user.company_id,
+            branch_id: user.branch_id || null,
+            permissions: {},
+            kyc_only: true,
+            kyc_status: user.kyc_status,
+          },
+          process.env.JWT_SECRET,
+          { expiresIn: "3h" },
+        );
 
-      return res.status(403).json({
-        message:
-          user.kyc_status === "blocked"
-            ? "Company account blocked due to failed KYC. Please contact Super Admin."
-            : "Company KYC verification is pending. Please complete KYC verification.",
-        kyc_required: true,
-        company_id: user.company_id,
-        kyc_status: user.kyc_status || "pending",
-        kyc_attempts: user.kyc_attempts || 0,
-        token: kycToken,
-        user: {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          role: user.role,
+        await createAuditLog({
           company_id: user.company_id,
-        },
-      });
+          user_id: user.id,
+          role: user.role,
+          action: "KYC_LOGIN_BLOCKED",
+          module_name: "Auth",
+          record_id: user.id,
+          description: `Company Admin login blocked because KYC status is ${
+            user.kyc_status || "unknown"
+          }`,
+          ip_address: req.ip,
+          user_agent: getUserAgent(req),
+        });
+
+        return res.status(403).json({
+          message:
+            user.kyc_status === "blocked"
+              ? "Company account blocked due to failed KYC. Please contact Super Admin."
+              : "Company KYC has been rejected. Please contact Super Admin.",
+          kyc_required: true,
+          company_id: user.company_id,
+          kyc_status: user.kyc_status,
+          kyc_attempts: user.kyc_attempts || 0,
+          token: kycToken,
+          user: {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            role: user.role,
+            company_id: user.company_id,
+            branch_id: user.branch_id || null,
+            branch_name: user.branch_name || null,
+            branch_code: user.branch_code || null,
+          },
+        });
+      }
     }
 
-    if (user.status !== "active") {
+    /*
+     * New company admin is initially stored as inactive while KYC is pending.
+     * Pending/submitted KYC company admins are allowed to login in view-only
+     * mode. All other inactive users remain blocked.
+     */
+    const isPendingKycCompanyAdmin =
+      user.role === "company_admin" &&
+      Boolean(user.company_id) &&
+      ["pending", "submitted"].includes(user.kyc_status);
+
+    if (user.status !== "active" && !isPendingKycCompanyAdmin) {
       await createAuditLog({
         company_id: user.company_id || null,
         user_id: user.id,
@@ -255,7 +282,20 @@ export const login = async (req, res) => {
         message: `${user.email} attempted login.`,
       });
 
-      return res.status(403).json({ message: "Account is inactive" });
+      return res.status(403).json({
+        message: "Account is inactive",
+      });
+    }
+
+    if (
+      user.role === "company_admin" &&
+      user.company_id &&
+      user.company_status !== "active" &&
+      !isPendingKycCompanyAdmin
+    ) {
+      return res.status(403).json({
+        message: "Company account is inactive",
+      });
     }
 
     const userPermissions = parsePermissions(user.permissions);
@@ -266,6 +306,14 @@ export const login = async (req, res) => {
       ...(companyPermissions?.[user.role] || {}),
     };
 
+    const hasFullKycAccess =
+      user.role !== "company_admin" ||
+      ["approved", "manual_verified"].includes(user.kyc_status);
+
+    const featureAccess = hasFullKycAccess
+      ? "full"
+      : "view_only";
+
     const token = jwt.sign(
       {
         id: user.id,
@@ -274,6 +322,8 @@ export const login = async (req, res) => {
         branch_id: user.branch_id || null,
         customer_id: user.customer_id || null,
         permissions,
+        kyc_status: user.kyc_status || null,
+        feature_access: featureAccess,
       },
       process.env.JWT_SECRET,
       { expiresIn: "1d" },
@@ -282,8 +332,9 @@ export const login = async (req, res) => {
     await db.query(
       `
       UPDATE tbl_users
-      SET failed_login_attempts = 0,
-          last_login_at = NOW()
+      SET
+        failed_login_attempts = 0,
+        last_login_at = NOW()
       WHERE id = ?
       `,
       [user.id],
@@ -320,9 +371,13 @@ export const login = async (req, res) => {
         customer_id: user.customer_id || null,
         profile_image: user.profile_image || null,
         permissions,
+        kyc_status: user.kyc_status || null,
+        feature_access: featureAccess,
       },
     });
   } catch (error) {
+    console.error("LOGIN ERROR:", error);
+
     return res.status(500).json({
       message: "Login error",
       error: error.message,
@@ -371,7 +426,9 @@ export const getMe = async (req, res) => {
         u.last_login_at,
         u.profile_image,
         u.permissions,
-        c.role_permissions
+        c.role_permissions,
+        c.kyc_status,
+        c.status AS company_status
       FROM tbl_users u
       LEFT JOIN tbl_company_branches b
         ON u.branch_id = b.id
@@ -385,18 +442,30 @@ export const getMe = async (req, res) => {
     );
 
     if (users.length === 0) {
-      return res.status(404).json({ message: "User not found" });
+      return res.status(404).json({
+        message: "User not found",
+      });
     }
 
     const user = users[0];
 
     const userPermissions = parsePermissions(user.permissions);
-    const companyRolePermissions = parsePermissions(user.role_permissions);
+    const companyRolePermissions = parsePermissions(
+      user.role_permissions,
+    );
 
     const finalPermissions = {
       ...userPermissions,
       ...(companyRolePermissions?.[user.role] || {}),
     };
+
+    const hasFullKycAccess =
+      user.role !== "company_admin" ||
+      ["approved", "manual_verified"].includes(user.kyc_status);
+
+    const featureAccess = hasFullKycAccess
+      ? "full"
+      : "view_only";
 
     delete user.role_permissions;
 
@@ -404,9 +473,13 @@ export const getMe = async (req, res) => {
       user: {
         ...user,
         permissions: finalPermissions,
+        kyc_status: user.kyc_status || null,
+        feature_access: featureAccess,
       },
     });
   } catch (error) {
+    console.error("GET ME ERROR:", error);
+
     return res.status(500).json({
       message: "Profile fetch error",
       error: error.message,
@@ -446,7 +519,10 @@ export const registerCompany = async (req, res) => {
       return res.status(400).json({ message: "Company name is required" });
     }
 
-    if (normalizedCompanyName.length < 3 || normalizedCompanyName.length > 100) {
+    if (
+      normalizedCompanyName.length < 3 ||
+      normalizedCompanyName.length > 100
+    ) {
       return res.status(400).json({
         message: "Company name must be between 3 and 100 characters",
       });

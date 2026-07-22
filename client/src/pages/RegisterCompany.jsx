@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../services/api";
 import toast from "react-hot-toast";
@@ -11,7 +11,6 @@ import {
   Eye,
   EyeOff,
   FileText,
-  Globe2,
   Hash,
   Lock,
   Mail,
@@ -23,8 +22,6 @@ import {
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_REGEX = /^[6-9]\d{9}$/;
-const GST_REGEX =
-  /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
 const NAME_REGEX = /^[a-zA-Z0-9\s.&'(),-]+$/;
 const BRANCH_CODE_REGEX = /^[a-zA-Z0-9_-]{2,20}$/;
 
@@ -61,9 +58,6 @@ function RegisterCompany() {
     company_name: "",
     company_email: "",
     company_phone: "",
-    gst_number: "",
-    country: "India",
-    hq_branch_name: "",
     hq_branch_code: "",
     admin_name: "",
     admin_email: "",
@@ -72,6 +66,17 @@ function RegisterCompany() {
   });
 
   const progress = useMemo(() => (step === 1 ? 50 : 100), [step]);
+
+    useEffect(() => {
+    if (Object.keys(errors).length === 0) return;
+
+    const timer = setTimeout(() => {
+      setErrors({});
+    }, 2500); // 2.5 seconds
+
+    return () => clearTimeout(timer);
+  }, [errors]);
+
 
   const updateField = (name, value) => {
     setFormData((prev) => ({
@@ -93,9 +98,6 @@ function RegisterCompany() {
     const companyName = cleanString(formData.company_name);
     const companyEmail = normalizeEmail(formData.company_email);
     const companyPhone = cleanString(formData.company_phone);
-    const gstNumber = normalizeUpper(formData.gst_number);
-    const country = cleanString(formData.country);
-    const hqBranchName = cleanString(formData.hq_branch_name);
     const hqBranchCode = normalizeUpper(formData.hq_branch_code);
 
     if (!companyName) {
@@ -118,26 +120,11 @@ function RegisterCompany() {
         "Company phone must be a valid 10 digit Indian mobile number";
     }
 
-    if (gstNumber && !GST_REGEX.test(gstNumber)) {
-      nextErrors.gst_number = "Invalid GST number format";
-    }
-
-    if (country && country.length > 60) {
-      nextErrors.country = "Country must be less than 60 characters";
-    }
-
-    if (!hqBranchName) {
-      nextErrors.hq_branch_name = "HQ Branch name is required";
-    } else if (hqBranchName.length < 2 || hqBranchName.length > 100) {
-      nextErrors.hq_branch_name =
-        "HQ Branch name must be between 2 and 100 characters";
-    }
-
     if (!hqBranchCode) {
-      nextErrors.hq_branch_code = "HQ Branch code is required";
+      nextErrors.hq_branch_code = "Head Office code is required";
     } else if (!BRANCH_CODE_REGEX.test(hqBranchCode)) {
       nextErrors.hq_branch_code =
-        "HQ Branch code must be 2-20 characters and can contain letters, numbers, underscore or hyphen";
+        "Head Office code must be 2-20 characters and can contain letters, numbers, underscore or hyphen";
     }
 
     setErrors(nextErrors);
@@ -197,9 +184,7 @@ function RegisterCompany() {
         company_name: cleanString(formData.company_name),
         company_email: normalizeEmail(formData.company_email),
         company_phone: cleanString(formData.company_phone),
-        gst_number: normalizeUpper(formData.gst_number),
-        country: cleanString(formData.country) || "India",
-        hq_branch_name: cleanString(formData.hq_branch_name),
+        hq_branch_name: cleanString(formData.company_name),
         hq_branch_code: normalizeUpper(formData.hq_branch_code),
         admin_name: cleanString(formData.admin_name),
         admin_email: normalizeEmail(formData.admin_email),
@@ -215,7 +200,8 @@ function RegisterCompany() {
       localStorage.removeItem("user");
 
       if (data.token) localStorage.setItem("kyc_token", data.token);
-      if (data.user) localStorage.setItem("kyc_user", JSON.stringify(data.user));
+      if (data.user)
+        localStorage.setItem("kyc_user", JSON.stringify(data.user));
 
       localStorage.setItem("pending_company_id", data.company_id);
       localStorage.setItem("pending_admin_email", payload.admin_email);
@@ -235,8 +221,8 @@ function RegisterCompany() {
   };
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-gradient-to-br from-slate-100 via-blue-50 to-slate-100 p-3 sm:p-4 lg:p-6">
-      <div className="mx-auto grid min-h-[calc(100vh-24px)] w-full max-w-6xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl sm:min-h-[calc(100vh-32px)] lg:min-h-[calc(100vh-48px)] lg:grid-cols-[1.05fr_.95fr]">
+    <div className="min-h-screen overflow-x-hidden bg-gradient-to-br from-slate-100 via-blue-50 to-slate-100 p-3 sm:p-4 lg:h-screen lg:overflow-hidden lg:p-5">
+      <div className="mx-auto grid min-h-[calc(100vh-24px)] w-full max-w-6xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl sm:min-h-[calc(100vh-32px)] lg:h-[calc(100vh-40px)] lg:min-h-0 lg:grid-cols-[1.05fr_.95fr]">
         <section className="relative hidden overflow-hidden bg-slate-950 p-8 text-white lg:block xl:p-10">
           <div className="absolute -right-24 -top-24 h-72 w-72 rounded-full bg-blue-600/25 blur-3xl" />
           <div className="absolute -bottom-28 left-10 h-72 w-72 rounded-full bg-cyan-500/20 blur-3xl" />
@@ -261,50 +247,50 @@ function RegisterCompany() {
                 Start your company workspace
               </div>
 
-              <h2 className="max-w-lg text-3xl font-extrabold leading-tight xl:text-4xl">
+              <h2 className="max-w-lg text-2xl font-bold leading-tight xl:text-3xl">
                 Start Your Business Journey with Smart Invoice
               </h2>
 
-              <p className="mt-4 max-w-md text-base leading-7 text-slate-400">
-                Set up your company, onboard your team, manage customers, create
-                invoices and handle subscriptions from one secure platform.
+              <p className="mt-3 max-w-md text-sm leading-6 text-slate-400">
+                Create the workspace, add your head office and prepare your
+                administrator account in two simple steps.
               </p>
             </div>
 
             <div className="grid grid-cols-1 gap-4">
               <FeatureItem
-                icon={<Building2 size={19} />}
-                title="Company Workspace"
-                text="Your company profile will appear inside SuperAdmin company records."
+                icon={<Building2 size={18} />}
+                title="Company workspace"
+                text="Keep customers, invoices and business records together."
               />
 
               <FeatureItem
-                icon={<ShieldCheck size={19} />}
-                title="Company Admin Auto Create"
-                text="Admin login is created automatically during registration."
+                icon={<ShieldCheck size={18} />}
+                title="Secure admin access"
+                text="Your primary administrator account is created instantly."
               />
 
               <FeatureItem
-                icon={<CheckCircle2 size={19} />}
-                title="HQ Branch Auto Create"
-                text="Your main branch is created automatically and used across dropdowns."
+                icon={<CheckCircle2 size={18} />}
+                title="Head office ready"
+                text="Your main branch is available across the platform."
               />
             </div>
           </div>
         </section>
 
-        <section className="flex min-h-full items-center overflow-y-auto px-4 py-8 sm:px-8 sm:py-10 lg:px-10">
+        <section className="flex min-h-full items-center overflow-y-auto px-4 py-6 sm:px-8 sm:py-8 lg:min-h-0 lg:overflow-hidden lg:px-9 lg:py-5">
           <div className="mx-auto w-full max-w-md">
             <button
               type="button"
               onClick={() => navigate("/")}
-              className="mb-5 inline-flex items-center gap-2 text-sm font-semibold text-slate-500 transition hover:text-blue-700"
+              className="mb-3 inline-flex items-center gap-2 text-sm font-semibold text-slate-500 transition hover:text-blue-700"
             >
               <ArrowLeft size={16} />
               Back to login
             </button>
 
-            <div className="mb-5 text-center sm:text-left">
+            <div className="mb-3 text-center sm:text-left">
               <div className="mb-4 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-600/20 lg:hidden">
                 <FileText size={28} />
               </div>
@@ -320,18 +306,18 @@ function RegisterCompany() {
 
               <p className="mt-2 text-sm leading-6 text-slate-500">
                 Step {step} of 2 —{" "}
-                {step === 1 ? "Company and HQ details" : "Admin details"}
+                {step === 1 ? "Company details" : "Admin details"}
               </p>
             </div>
 
-            <div className="mb-5 h-2 overflow-hidden rounded-full bg-slate-100">
+            <div className="mb-3 h-2 overflow-hidden rounded-full bg-slate-100">
               <div
                 className="h-full rounded-full bg-blue-600 transition-all duration-300"
                 style={{ width: `${progress}%` }}
               />
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+            <form onSubmit={handleSubmit} className="space-y-3.5" noValidate>
               {step === 1 ? (
                 <>
                   <Input
@@ -356,7 +342,7 @@ function RegisterCompany() {
                       updateField("company_email", e.target.value)
                     }
                     icon={<Mail size={18} />}
-                    placeholder="info@company.com"
+                    placeholder="company@email.com"
                     error={errors.company_email}
                     required
                   />
@@ -369,70 +355,33 @@ function RegisterCompany() {
                       updateField("company_phone", e.target.value)
                     }
                     icon={<Phone size={18} />}
-                    placeholder="9876543210"
+                    placeholder="##########"
                     error={errors.company_phone}
                   />
 
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="rounded-xl">
+ 
                     <Input
-                      label="GST Number"
-                      name="gst_number"
-                      value={formData.gst_number}
+                      label="Head Office Code"
+                      name="hq_branch_code"
+                      value={formData.hq_branch_code}
                       onChange={(e) =>
-                        updateField("gst_number", e.target.value.toUpperCase())
+                        updateField(
+                          "hq_branch_code",
+                          e.target.value.toUpperCase(),
+                        )
                       }
-                      icon={<FileText size={18} />}
-                      placeholder="Optional"
-                      error={errors.gst_number}
+                      icon={<Hash size={18} />}
+                      placeholder="001"
+                      error={errors.hq_branch_code}
+                      required
                     />
 
-                    <Input
-                      label="Country"
-                      name="country"
-                      value={formData.country}
-                      onChange={(e) => updateField("country", e.target.value)}
-                      icon={<Globe2 size={18} />}
-                      placeholder="India"
-                      error={errors.country}
-                    />
-                  </div>
+                    <p className="mb-3 text-xs leading-5 text-blue-700">
+                      The company name will automatically be used as the Head
+                      Office name.
+                    </p>
 
-                  <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-4">
-                    <div className="mb-3 flex items-center gap-2 text-sm font-bold text-blue-800">
-                      <Building2 size={17} />
-                      Main Branch / Head Office
-                    </div>
-
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                      <Input
-                        label="HQ Branch Name"
-                        name="hq_branch_name"
-                        value={formData.hq_branch_name}
-                        onChange={(e) =>
-                          updateField("hq_branch_name", e.target.value)
-                        }
-                        icon={<Building2 size={18} />}
-                        placeholder="Main Office"
-                        error={errors.hq_branch_name}
-                        required
-                      />
-
-                      <Input
-                        label="HQ Branch Code"
-                        name="hq_branch_code"
-                        value={formData.hq_branch_code}
-                        onChange={(e) =>
-                          updateField(
-                            "hq_branch_code",
-                            e.target.value.toUpperCase(),
-                          )
-                        }
-                        icon={<Hash size={18} />}
-                        placeholder="001"
-                        error={errors.hq_branch_code}
-                        required
-                      />
-                    </div>
                   </div>
 
                   <button
@@ -485,7 +434,11 @@ function RegisterCompany() {
                         onClick={() => setShowPassword((prev) => !prev)}
                         className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
                       >
-                        {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                        {showPassword ? (
+                          <EyeOff size={18} />
+                        ) : (
+                          <Eye size={18} />
+                        )}
                       </button>
                     }
                     required
@@ -505,9 +458,7 @@ function RegisterCompany() {
                     rightIcon={
                       <button
                         type="button"
-                        onClick={() =>
-                          setShowConfirmPassword((prev) => !prev)
-                        }
+                        onClick={() => setShowConfirmPassword((prev) => !prev)}
                         className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
                       >
                         {showConfirmPassword ? (
@@ -562,25 +513,31 @@ function Input({
   rightIcon,
 }) {
   return (
-    <div>
-      <label className="mb-1.5 block text-xs font-semibold text-slate-700">
+    <div className="relative">
+      <label
+        htmlFor={name}
+        className="mb-1.5 block text-xs font-semibold text-slate-700"
+      >
         {label}
         {required && <span className="ml-0.5 text-red-500">*</span>}
       </label>
 
       <div className="relative">
-        <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">
+        <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">
           {icon}
         </span>
 
         <input
+          id={name}
           type={type}
           name={name}
           value={value}
           onChange={onChange}
           autoComplete="off"
           placeholder={placeholder}
-          className={`w-full rounded-xl border bg-white py-3.5 pl-11 text-sm font-medium text-slate-800 outline-none transition focus:ring-4 ${
+          aria-invalid={Boolean(error)}
+          aria-describedby={error ? `${name}-error` : undefined}
+          className={`w-full rounded-xl border bg-white py-3 pl-11 text-sm font-medium text-slate-800 outline-none transition focus:ring-4 ${
             rightIcon ? "pr-12" : "pr-3"
           } ${
             error
@@ -594,11 +551,20 @@ function Input({
             {rightIcon}
           </div>
         )}
+
+        {error && (
+          <div
+            id={`${name}-error`}
+            role="alert"
+            className="absolute right-2 top-[calc(100%-2px)] z-40 max-w-[calc(100%-16px)] animate-[fadeIn_.16s_ease-out] rounded-xl border border-red-200 bg-white px-3 py-2 text-xs font-semibold leading-4 text-red-600 shadow-[0_10px_30px_rgba(15,23,42,0.18)]"
+          >
+            <span className="absolute -top-1.5 right-5 h-3 w-3 rotate-45 border-l border-t border-red-200 bg-white" />
+            <span className="relative">{error}</span>
+          </div>
+        )}
       </div>
 
-      {error ? (
-        <p className="mt-1 text-xs font-semibold text-red-600">{error}</p>
-      ) : helper ? (
+      {!error && helper ? (
         <p className="mt-1 text-xs font-medium leading-5 text-slate-400">
           {helper}
         </p>

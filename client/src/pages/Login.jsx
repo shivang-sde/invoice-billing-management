@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import api from "../services/api";
 import toast from "react-hot-toast";
@@ -21,7 +21,10 @@ import {
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-const normalizeEmail = (email) => String(email || "").trim().toLowerCase();
+const normalizeEmail = (email) =>
+  String(email || "")
+    .trim()
+    .toLowerCase();
 
 function Login() {
   const navigate = useNavigate();
@@ -40,6 +43,26 @@ function Login() {
   const [forgotEmail, setForgotEmail] = useState(location.state?.email || "");
   const [forgotLoading, setForgotLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+
+  useEffect(() => {
+    if (Object.keys(errors).length === 0) return undefined;
+
+    const timer = window.setTimeout(() => {
+      setErrors({});
+    }, 2500);
+
+    return () => window.clearTimeout(timer);
+  }, [errors]);
+
+  useEffect(() => {
+    if (!forgotError) return undefined;
+
+    const timer = window.setTimeout(() => {
+      setForgotError("");
+    }, 2500);
+
+    return () => window.clearTimeout(timer);
+  }, [forgotError]);
 
   const validateLogin = () => {
     const nextErrors = {};
@@ -106,14 +129,53 @@ function Login() {
       };
 
       const res = await api.post("/auth/login", payload);
-      const user = res.data.user;
 
+      const user = res.data.user;
+      const token = res.data.token;
+
+      const isPendingKycCompanyAdmin =
+        user?.role === "company_admin" &&
+        ["pending", "submitted"].includes(user?.kyc_status);
+
+      /*
+       * Pending/submitted KYC Company Admin:
+       * User; directly KYC verification page redirect.
+       */
+      if (isPendingKycCompanyAdmin) {
+        localStorage.removeItem("token");
+        localStorage.removeItem("user");
+
+        localStorage.setItem("kyc_token", token);
+        localStorage.setItem("kyc_user", JSON.stringify(user));
+        localStorage.setItem("pending_company_id", String(user.company_id));
+        localStorage.setItem(
+          "pending_admin_email",
+          normalizeEmail(user.email || formData.email),
+        );
+
+        toast.success("Login successful. Please complete KYC verification.");
+
+        navigate(`/kyc-verification/${user.company_id}`, {
+          replace: true,
+          state: {
+            email: normalizeEmail(user.email || formData.email),
+            kyc_status: user.kyc_status,
+          },
+        });
+
+        return;
+      }
+
+      /*
+       * Normal/full-access login:
+       * Clear Old KYC session data clear; normal token save hoga.
+       */
       localStorage.removeItem("kyc_token");
       localStorage.removeItem("kyc_user");
       localStorage.removeItem("pending_company_id");
       localStorage.removeItem("pending_admin_email");
 
-      localStorage.setItem("token", res.data.token);
+      localStorage.setItem("token", token);
       localStorage.setItem("user", JSON.stringify(user));
 
       toast.success(
@@ -132,6 +194,9 @@ function Login() {
     } catch (error) {
       const data = error.response?.data;
 
+      /*
+       * Blocked/rejected KYC case:
+       */
       if (
         error.response?.status === 403 &&
         data?.kyc_required &&
@@ -148,8 +213,12 @@ function Login() {
           localStorage.setItem("kyc_user", JSON.stringify(data.user));
         }
 
-        localStorage.setItem("pending_company_id", data.company_id);
-        localStorage.setItem("pending_admin_email", normalizeEmail(formData.email));
+        localStorage.setItem("pending_company_id", String(data.company_id));
+
+        localStorage.setItem(
+          "pending_admin_email",
+          normalizeEmail(formData.email),
+        );
 
         toast.error(data.message || "Please complete KYC verification");
 
@@ -194,8 +263,8 @@ function Login() {
   };
 
   return (
-    <div className="h-screen overflow-hidden bg-gradient-to-br from-slate-100 via-blue-50 to-slate-100 px-4 py-4">
-      <div className="mx-auto grid h-[calc(100vh-32px)] w-full max-w-6xl grid-cols-1 overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-2xl lg:grid-cols-[1.05fr_.95fr]">
+    <div className="min-h-screen overflow-x-hidden bg-gradient-to-br from-slate-100 via-blue-50 to-slate-100 p-3 sm:p-4 lg:h-screen lg:overflow-hidden">
+      <div className="mx-auto grid min-h-[calc(100vh-24px)] w-full max-w-6xl grid-cols-1 overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-2xl sm:min-h-[calc(100vh-32px)] lg:h-[calc(100vh-32px)] lg:min-h-0 lg:grid-cols-[1.05fr_.95fr]">
         <div className="relative hidden overflow-hidden bg-slate-950 p-10 text-white lg:block">
           <div className="absolute -right-24 -top-24 h-72 w-72 rounded-full bg-blue-600/25 blur-3xl" />
           <div className="absolute -bottom-28 left-10 h-72 w-72 rounded-full bg-cyan-500/20 blur-3xl" />
@@ -253,7 +322,7 @@ function Login() {
           </div>
         </div>
 
-        <div className="flex items-center p-6 sm:p-10 lg:p-12">
+        <div className="flex min-h-full items-center overflow-y-auto p-6 sm:p-10 lg:min-h-0 lg:p-12">
           <div className="mx-auto w-full max-w-md">
             <div className="mb-8">
               <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700">
@@ -271,8 +340,12 @@ function Login() {
               </p>
             </div>
 
-            <form onSubmit={handleLogin} className="space-y-5" noValidate>
-              <div>
+            <form
+              onSubmit={handleLogin}
+              className="relative space-y-5"
+              noValidate
+            >
+              <div className="relative">
                 <label className="mb-2 block text-sm font-semibold text-slate-700">
                   Email Address
                 </label>
@@ -298,13 +371,19 @@ function Login() {
                 </div>
 
                 {errors.email && (
-                  <p className="mt-1.5 text-xs font-semibold text-red-600">
-                    {errors.email}
-                  </p>
+                  <div
+                    role="alert"
+                    className="pointer-events-none absolute right-2 top-[calc(100%+6px)] z-50 w-max max-w-[calc(100%-16px)] rounded-xl border border-red-200 bg-white px-3 py-2 text-xs font-semibold leading-4 text-red-600 shadow-[0_10px_30px_rgba(15,23,42,0.18)]"
+                  >
+                    <span className="absolute -top-1.5 right-5 h-3 w-3 rotate-45 border-l border-t border-red-200 bg-white" />
+                    <span className="relative block break-words">
+                      {errors.email}
+                    </span>
+                  </div>
                 )}
               </div>
 
-              <div>
+              <div className="relative">
                 <label className="mb-2 block text-sm font-semibold text-slate-700">
                   Password
                 </label>
@@ -333,9 +412,15 @@ function Login() {
                 </div>
 
                 {errors.password && (
-                  <p className="mt-1.5 text-xs font-semibold text-red-600">
-                    {errors.password}
-                  </p>
+                  <div
+                    role="alert"
+                    className="pointer-events-none absolute right-2 top-[calc(100%+6px)] z-50 w-max max-w-[calc(100%-16px)] rounded-xl border border-red-200 bg-white px-3 py-2 text-xs font-semibold leading-4 text-red-600 shadow-[0_10px_30px_rgba(15,23,42,0.18)]"
+                  >
+                    <span className="absolute -top-1.5 right-5 h-3 w-3 rotate-45 border-l border-t border-red-200 bg-white" />
+                    <span className="relative block break-words">
+                      {errors.password}
+                    </span>
+                  </div>
                 )}
 
                 <div className="mt-2 flex justify-end">
@@ -422,8 +507,12 @@ function Login() {
               </button>
             </div>
 
-            <form onSubmit={handleForgotPassword} className="space-y-4" noValidate>
-              <div>
+            <form
+              onSubmit={handleForgotPassword}
+              className="relative space-y-4"
+              noValidate
+            >
+              <div className="relative">
                 <label className="mb-2 block text-sm font-semibold text-slate-700">
                   Email Address
                 </label>
@@ -451,9 +540,15 @@ function Login() {
                 </div>
 
                 {forgotError && (
-                  <p className="mt-1.5 text-xs font-semibold text-red-600">
-                    {forgotError}
-                  </p>
+                  <div
+                    role="alert"
+                    className="pointer-events-none absolute right-2 top-[calc(100%+6px)] z-50 w-max max-w-[calc(100%-16px)] rounded-xl border border-red-200 bg-white px-3 py-2 text-xs font-semibold leading-4 text-red-600 shadow-[0_10px_30px_rgba(15,23,42,0.18)]"
+                  >
+                    <span className="absolute -top-1.5 right-5 h-3 w-3 rotate-45 border-l border-t border-red-200 bg-white" />
+                    <span className="relative block break-words">
+                      {forgotError}
+                    </span>
+                  </div>
                 )}
               </div>
 

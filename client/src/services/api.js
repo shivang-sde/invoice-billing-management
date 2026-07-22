@@ -1,22 +1,54 @@
 import axios from "axios";
 
 const api = axios.create({
-  // ◄ CHANGED: Reads the variable dynamically from your configuration!
   baseURL: import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api",
 });
 
-api.interceptors.request.use((config) => {
-  const path = window.location.pathname;
+//  REQUEST INTERCEPTOR
 
-  const token = path.startsWith("/kyc-verification")
-    ? localStorage.getItem("kyc_token")
-    : localStorage.getItem("token");
+api.interceptors.request.use(
+  (config) => {
+    const path = window.location.pathname;
 
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
+    const token = path.startsWith("/kyc-verification")
+      ? localStorage.getItem("kyc_token")
+      : localStorage.getItem("token");
 
-  return config;
-});
+    if (token) {
+      config.headers = config.headers || {};
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  },
+);
+
+//  RESPONSE INTERCEPTOR
+
+api.interceptors.response.use(
+  (response) => response,
+
+  (error) => {
+    const status = error.response?.status;
+    const responseData = error.response?.data;
+
+    if (status === 403 && responseData?.kyc_required === true) {
+      window.dispatchEvent(
+        new CustomEvent("kycRequired", {
+          detail: {
+            message:
+              responseData?.message ||
+              "Your KYC is pending. Complete KYC to use this feature.",
+          },
+        }),
+      );
+    }
+
+    return Promise.reject(error);
+  },
+);
 
 export default api;

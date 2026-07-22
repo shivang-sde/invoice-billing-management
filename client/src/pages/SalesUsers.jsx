@@ -85,16 +85,55 @@ function SalesUsers() {
 
   const fetchData = async () => {
     try {
-      const [salesRes, branchRes] = await Promise.all([
+      const [salesResult, branchResult] = await Promise.allSettled([
         api.get("/users/sales-users"),
         api.get("/branches"),
       ]);
 
-      setSalesUsers(salesRes.data || []);
-      setBranches((branchRes.data || []).filter(isActiveBranch));
+      if (salesResult.status === "fulfilled") {
+        const salesData = Array.isArray(salesResult.value.data)
+          ? salesResult.value.data
+          : salesResult.value.data?.salesUsers || [];
+
+        setSalesUsers(salesData);
+      } else {
+        const salesError = salesResult.reason;
+
+        console.error(
+          "Sales users API failed:",
+          salesError.response?.status,
+          salesError.response?.data,
+        );
+
+        toast.error(
+          salesError.response?.data?.message || "Failed to fetch sales users",
+        );
+      }
+
+      if (branchResult.status === "fulfilled") {
+        const branchData = Array.isArray(branchResult.value.data)
+          ? branchResult.value.data
+          : branchResult.value.data?.branches || [];
+
+        setBranches(branchData.filter(isActiveBranch));
+      } else {
+        const branchError = branchResult.reason;
+
+        console.error(
+          "Branches API failed:",
+          branchError.response?.status,
+          branchError.response?.data,
+        );
+
+        toast.error(
+          branchError.response?.data?.message || "Failed to fetch branches",
+        );
+      }
     } catch (error) {
+      console.error("Sales users page fetch error:", error);
+
       toast.error(
-        error.response?.data?.message || "Failed to fetch sales users",
+        error.response?.data?.message || "Failed to load sales users page",
       );
     }
   };
@@ -145,7 +184,9 @@ function SalesUsers() {
     toast(
       (t) => (
         <div className="space-y-3">
-          <p className="text-sm font-medium text-slate-800 dark:text-slate-100">{message}</p>
+          <p className="text-sm font-medium text-slate-800 dark:text-slate-100">
+            {message}
+          </p>
 
           <div className="flex justify-end gap-2">
             <button
@@ -334,7 +375,9 @@ function SalesUsers() {
               Sales Team Management
             </div>
 
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Sales Users</h1>
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
+              Sales Users
+            </h1>
 
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
               Create, update and assign branch-wise sales users for quotations,
@@ -538,7 +581,13 @@ function SalesUsers() {
   );
 }
 
-function SalesUserTable({ salesUsers, onView, onEdit, onToggleStatus, formatBranchLabel }) {
+function SalesUserTable({
+  salesUsers,
+  onView,
+  onEdit,
+  onToggleStatus,
+  formatBranchLabel,
+}) {
   return (
     <div className="w-full overflow-x-auto">
       <table className="w-full min-w-[920px] text-sm">
@@ -559,7 +608,8 @@ function SalesUserTable({ salesUsers, onView, onEdit, onToggleStatus, formatBran
 
         <tbody>
           {salesUsers.map((item) => {
-            const isInactive = String(item.status || "active").toLowerCase() === "inactive";
+            const isInactive =
+              String(item.status || "active").toLowerCase() === "inactive";
 
             return (
               <tr
@@ -587,7 +637,9 @@ function SalesUserTable({ salesUsers, onView, onEdit, onToggleStatus, formatBran
                   {formatBranchLabel(item)}
                 </td>
 
-                <td className="p-4 text-slate-600 dark:text-slate-300">{item.email || "-"}</td>
+                <td className="p-4 text-slate-600 dark:text-slate-300">
+                  {item.email || "-"}
+                </td>
 
                 <td className="p-4 capitalize text-slate-600 dark:text-slate-300">
                   {item.role?.replace("_", " ") || "sales user"}
@@ -932,8 +984,12 @@ function FormModal({ title, description, icon, onClose, children }) {
             </div>
 
             <div>
-              <h2 className="text-xl font-bold text-slate-900 dark:text-white">{title}</h2>
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{description}</p>
+              <h2 className="text-xl font-bold text-slate-900 dark:text-white">
+                {title}
+              </h2>
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                {description}
+              </p>
             </div>
           </div>
 
@@ -946,7 +1002,9 @@ function FormModal({ title, description, icon, onClose, children }) {
           </button>
         </div>
 
-        <div className="overflow-auto bg-white p-5 dark:bg-slate-900">{children}</div>
+        <div className="overflow-auto bg-white p-5 dark:bg-slate-900">
+          {children}
+        </div>
       </div>
     </div>
   );
@@ -957,15 +1015,18 @@ function StatsCard({ title, value, icon, color }) {
     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="text-sm font-medium text-slate-500 dark:text-slate-400">{title}</p>
-          <h2 className="mt-1 text-2xl font-bold text-slate-900 dark:text-white">{value}</h2>
+          <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
+            {title}
+          </p>
+          <h2 className="mt-1 text-2xl font-bold text-slate-900 dark:text-white">
+            {value}
+          </h2>
         </div>
         <div className={`rounded-xl p-3 ${color}`}>{icon}</div>
       </div>
     </div>
   );
 }
-
 
 function BranchSelect({
   branches,
@@ -1148,10 +1209,7 @@ function CustomDropdown({ value, onChange, options, icon }) {
 
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target)
-      ) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
         setOpen(false);
       }
     };
@@ -1171,7 +1229,11 @@ function CustomDropdown({ value, onChange, options, icon }) {
         className="flex w-full items-center justify-between gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 outline-none transition hover:border-blue-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-blue-500 dark:focus:ring-blue-950/50"
       >
         <span className="flex min-w-0 items-center gap-2">
-          {icon && <span className="shrink-0 text-slate-400 dark:text-slate-500">{icon}</span>}
+          {icon && (
+            <span className="shrink-0 text-slate-400 dark:text-slate-500">
+              {icon}
+            </span>
+          )}
           <span className="truncate">{selected?.label || "Select"}</span>
         </span>
 
@@ -1197,7 +1259,9 @@ function CustomDropdown({ value, onChange, options, icon }) {
                   setOpen(false);
                 }}
                 className={`flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-sm font-semibold transition hover:bg-blue-50 dark:hover:bg-slate-800 hover:text-blue-700 ${
-                  active ? "bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300" : "text-slate-700 dark:text-slate-200"
+                  active
+                    ? "bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300"
+                    : "text-slate-700 dark:text-slate-200"
                 }`}
               >
                 <span className="truncate">{option.label}</span>
@@ -1270,7 +1334,9 @@ function Field({ icon, label, children }) {
 function ViewField({ label, value }) {
   return (
     <div>
-      <p className="mb-1.5 text-sm font-semibold text-slate-700 dark:text-slate-200">{label}</p>
+      <p className="mb-1.5 text-sm font-semibold text-slate-700 dark:text-slate-200">
+        {label}
+      </p>
       <div className="min-h-[42px] rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm capitalize text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
         {value || "-"}
       </div>
